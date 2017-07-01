@@ -107,16 +107,6 @@ static const char *getDateString(time_t t){
 	return scratch;
 }
 
-static void logAddress(const char *adres){
-    if ( gAddrFile == NULL ){
-        gAddrFile = fopen("adresy.txt", "wb");
-    }
-    if ( gAddrFile ){
-        fprintf(gAddrFile,"%s\n", adres );
-        fflush(gAddrFile);
-    }
-}
-
 
 static void logMessage(const char *fmt,...){
 	char wbuff[2048];
@@ -134,6 +124,21 @@ static void logMessage(const char *fmt,...){
 		fprintf(gLogFile,"%s", wbuff );
 		fflush(gLogFile);
 	}
+}
+
+static void logAddress(const char *adres){
+    static uint32_t lp=0;
+    lp++;
+    if ( gAddrFile == NULL ){
+        gAddrFile = fopen("adresy.txt", "ab");
+    }
+    if ( gAddrFile ){
+        fprintf(gAddrFile,"%s\n", adres );
+    }
+    if (lp % 100000 == 0){
+        logMessage("adresy:%d\n",lp);
+        fflush(gAddrFile);
+    }
 }
 
 class Hash256 // 32 bajtowy integer - klasa podstawowa
@@ -1236,7 +1241,6 @@ public:
         }
         output.keyTypeName = getKeyType(output.keyType);
         getAsciiAddress(output);
-
         logAddress(output.asciiAddress);
 
 //		if ( output.keyType == BlockChain::KT_SCRIPT_HASH )
@@ -1244,8 +1248,7 @@ public:
 //			logMessage("ScriptHash: %s\r\n", output.asciiAddress );
 //		}
 
-        if ( gReportTransactionHash )
-        {
+        if ( gReportTransactionHash ){
             gIsWarning = true;
         }
         return ret;
@@ -1429,7 +1432,8 @@ public:
                     computeSHA256(transaction.transactionHash,32,transaction.transactionHash);
                     logMessage("TRANSACTION HASH:" );
                     printReverseHash(transaction.transactionHash);
-                    logMessage("\r\n");
+                    const char *ts = getTimeString(gBlockTime);
+                    logMessage(" time:'%s'\n",ts);
                 }
 
             }
@@ -4808,8 +4812,8 @@ public:
             size_t r = fread(blockData,block.blockLength,1,fph); // read the rest of the block (less the 8 byte header we have already consumed)
 
             if ( r == 1 ){
-                computeSHA256(blockData,4+32+32+4+4+4,block.computedBlockHash);
-                computeSHA256(block.computedBlockHash,32,block.computedBlockHash);
+//                computeSHA256(blockData,4+32+32+4+4+4,block.computedBlockHash);
+//                computeSHA256(block.computedBlockHash,32,block.computedBlockHash);
                 ret = block.processBlockData2(blockData,block.blockLength,mTransactionCount);
 //                if ( ret ) {
 //                    processTransactions(block);
@@ -5382,9 +5386,9 @@ public:
                         int z = sizeof(prefix);
                         if ( r == 1 ){
                             Hash256 *blockHash = static_cast< Hash256 *>(&header); // blockHash wskazuje na block Info
-                            memcpy(header.mPreviousBlockHash,prefix.mPreviousBlock,32);// kopiuje wpis prev... do info
-                            computeSHA256((uint8_t *)&prefix,sizeof(prefix),(uint8_t *)blockHash);
-                            computeSHA256((uint8_t *)blockHash,32,(uint8_t *)blockHash);
+//                            memcpy(header.mPreviousBlockHash,prefix.mPreviousBlock,32);// kopiuje wpis prev... do info
+//                            computeSHA256((uint8_t *)&prefix,sizeof(prefix),(uint8_t *)blockHash);
+//                            computeSHA256((uint8_t *)blockHash,32,(uint8_t *)blockHash);
                             uint32_t currentFileOffset = ftell(fph); // get the current file offset.
                             uint32_t advance = header.mBlockLength - sizeof(BlockPrefix);
                             currentFileOffset+=advance;
