@@ -42,16 +42,16 @@ public:
                       bool processTransactions,
                       StatResolution resolution,
                       uint32_t searchText,
-                      uint32_t zombieDays)
+                      uint32_t zombieDays,
+                      uint32_t startFileToScan)
     {
         mTransactionValue = true;
         mAnalyze = false;
         mExportTransactions = false;
-        mBlockChain = createBlockChain(dataPath);	// Create the block-chain parser using this root path
+        mBlockChain = createBlockChain(dataPath, startFileToScan);	// Create the block-chain parser using this root path
         mZombieDays = zombieDays;
         mSearchText = searchText;
-        if ( mBlockChain )
-        {
+        if ( mBlockChain ){
             mBlockChain->searchForText(mSearchText);
             mBlockChain->setZombieDays(mZombieDays);
         }
@@ -221,7 +221,7 @@ public:
 
     bool process2(void){
         bool ok = mBlockChain->readBlockHeaders2(mMaxBlock,mLastBlockScan);
-        if ( (mLastBlockScan%100) == 0 ){
+        if ( (mLastBlockScan%1000) == 0 ){
             printf("Reading block #%d of %d total.\r\n", mLastBlockScan, mMaxBlock );
         }
 
@@ -242,6 +242,10 @@ public:
     void setMaxBlocks(uint32_t maxBlocks)
     {
         mMaxBlock = maxBlocks;
+    }
+
+    void setLastFile(uint32_t lastFile){
+         lastFile;
     }
 
     CommandMode				mMode;
@@ -282,11 +286,13 @@ int main(int argc,const char **argv)
         printf("-zombie_days <n> : Number of days to consider a bitcoin address as a zombie, default value is 3 years.\n");
         printf("-transactions_only : Don't accumulate full statistics, just report transaction data.\n");
         printf("-find_text <n> : Search for occurrences of ASCII text in the blockchain and output it to the log file. <n> is how many ASCII characters in a row to report text.\n");
+        printf("-start_file <n> : start from n file *.dat\n");
     }
     else
     {
         uint32_t zombieDays = 365*3;
         uint32_t maxBlocks = 10000000;// 10 mln
+        uint32_t startFileToScan = 0;
         const char *dataPath = ".";
         int i = 1;
         StatResolution resolution = SR_YEAR;
@@ -361,6 +367,15 @@ int main(int argc,const char **argv)
                         printf("Error parsing option '-find_text', missing character length.\n");
                     }
                 }
+                else if (strcmp(option,"-start_file") == 0){
+                    i++;
+                    if ( i < argc ){
+                        startFileToScan = atoi(argv[i]);
+                        printf("Start block file set to %d\n", startFileToScan );
+                    } else {
+                        printf("Error parsing option '-start_file', missing day count.\n");
+                    }
+                }
                 else if ( strcmp(option,"-zombie_days") == 0 )
                 {
                     i++;
@@ -397,7 +412,7 @@ int main(int argc,const char **argv)
         {
             processTransactions = false;
         }
-        BlockChainCommand bc(dataPath,maxBlocks,processTransactions,resolution,searchText,zombieDays);
+        BlockChainCommand bc(dataPath,maxBlocks,processTransactions,resolution,searchText,zombieDays,startFileToScan);
         bc.setMaxBlocks(maxBlocks);
         while ( bc.process2() );
     }

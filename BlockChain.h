@@ -342,6 +342,6 @@ public:
 };
 
 
-BlockChain *createBlockChain(const char *rootPath);	// Create the BlockChain interface using this root directory for the location of the first 'blk00000.dat' on your hard drive.
+BlockChain *createBlockChain(const char *rootPath, uint32_t startFile);	// Create the BlockChain interface using this root directory for the location of the first 'blk00000.dat' on your hard drive.
 
 #endif

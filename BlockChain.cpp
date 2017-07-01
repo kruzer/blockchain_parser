@@ -1177,7 +1177,7 @@ public:
                 output.publicKey[0] = &gDummyKey[1];
             }
             output.keyType = BlockChain::KT_RIPEMD160;
-            logMessage("WARNING: Failed to decode public key in output script. Block %s : Transaction: %s : OutputIndex: %s scriptLength: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex), formatNumber(output.challengeScriptLength) );
+            logMessage("WAR: Failed to decode public key in output script. Block %s : Transaction: %s : OutputIndex: %s scriptLength: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex), formatNumber(output.challengeScriptLength) );
             gReportTransactionHash = true;
             gIsWarning = true;
         }
@@ -1401,6 +1401,7 @@ public:
                 exit(1);
             }
             if ( totalOutputCount < MAX_BLOCK_OUTPUTS ){
+                bool showHash=false;
                 for (uint32_t i=0; i<transaction.outputCount; i++){
                     gOutputIndex = i;
                     BlockChain::BlockOutput &output = transaction.outputs[i];
@@ -1409,13 +1410,16 @@ public:
                         logMessage("Failed to read output.\r\n");
                         exit(1);
 //						break;
+                    } else {
+                        if(!strcmp(output.asciiAddress,"1BadkEyPaj5oW2Uw4nY5BkYbPRYyTyqs9A")){
+                            showHash = true;
+                        }
                     }
                 }
 
                 transaction.lockTime = readU32();
-                /*
 
-                {
+                if(showHash){
                     transaction.transactionLength = (uint32_t)(mBlockRead - transactionBegin);
                     transaction.fileIndex = fileIndex;
                     transaction.fileOffset = fileOffset + (uint32_t)(transactionBegin-mBlockData);
@@ -1423,15 +1427,10 @@ public:
                     transactionIndex++;
                     computeSHA256(transactionBegin,transaction.transactionLength,transaction.transactionHash);
                     computeSHA256(transaction.transactionHash,32,transaction.transactionHash);
-
-                    if ( gReportTransactionHash ){
-                        logMessage("TRANSACTION HASH:" );
-                        printReverseHash(transaction.transactionHash);
-                        logMessage("\r\n");
-                        gReportTransactionHash = false;
-                    }
-
-                } */
+                    logMessage("TRANSACTION HASH:" );
+                    printReverseHash(transaction.transactionHash);
+                    logMessage("\r\n");
+                }
 
             }
         }
@@ -4448,7 +4447,7 @@ protected:
 class BlockChainImpl : public BlockChain
 {
 public:
-	BlockChainImpl(const char *rootPath)
+    BlockChainImpl(const char *rootPath, uint32_t startFile)
 	{
 		uint8_t key[20] = { 0x19, 0xa7, 0xd8, 0x69, 0x03, 0x23, 0x68, 0xfd, 0x1f, 0x1e, 0x26, 0xe5, 0xe7, 0x3a, 0x4a, 0xd0, 0xe4, 0x74, 0x96, 0x0e };
 		uint8_t temp[25];
@@ -4487,7 +4486,7 @@ public:
 		sprintf(mRootDir,"%s",rootPath);
 		mCurrentBlockData = mBlockDataBuffer;	// scratch buffers to read in up to 3 block.
 		mTransactionCount = 0;
-		mBlockIndex = 0;
+        mBlockIndex = startFile;
 		mBlockBase = 0;
 		mReadCount = 0;
 		for (uint32_t i=0; i<MAX_BLOCK_FILES; i++)
@@ -4536,19 +4535,12 @@ public:
 	}
 
 	// Open the next data file in the block-chain sequence
-    bool openNextBlock(void)
-	{
+    bool openNextBlock(void){
 		bool ret = false;
-
 		char scratch[512];
-#ifdef _MSC_VER
-		sprintf(scratch,"%s\\blk%05d.dat", mRootDir, mBlockIndex );	// get the filename
-#else
 		sprintf(scratch,"%s/blk%05d.dat", mRootDir, mBlockIndex );	// get the filename
-#endif
-		FILE *fph = fopen(scratch,"rb");
-		if ( fph )
-		{
+        FILE *fph = fopen(scratch,"rb");
+		if ( fph ){
 			fseek(fph,0L,SEEK_END);
 			mFileLength = ftell(fph);
 			fseek(fph,0L,SEEK_SET);
@@ -4556,29 +4548,24 @@ public:
 			ret = true;
 			logMessage("Successfully opened block-chain input file '%s'\r\n", scratch );
 		}
-		else
-		{
+		else{
 			logMessage("Failed to open block-chain input file '%s'\r\n", scratch );
 		}
-		if ( mBlockHeaderMap.size() )
-		{
+		if ( mBlockHeaderMap.size() ){
 			logMessage("Scanned %s block headers so far, %s since last time.\r\n", formatNumber(mBlockHeaderMap.size()), formatNumber(mBlockHeaderMap.size()-mLastBlockHeaderCount));
 		}
-
 		mLastBlockHeaderCount = mBlockHeaderMap.size();
-
 		return ret;
 	}
 
-	virtual void release(void)
-	{
+	virtual void release(void){
 		delete this;
 	}
 
 	// Returns true if we successfully opened the block-chain input file
 	bool isValid(void)
 	{
-        return mBlockChain[0] ? true : false;
+        return mBlockChain[mBlockIndex] ? true : false;
 	}
 
 	void processTransactions(Block &block)
@@ -5485,10 +5472,8 @@ public:
 		return false;
 	}
 
-    virtual bool readBlockHeaders2(uint32_t maxBlock,uint32_t &blockCount)
-    {
-        if ( readBlockHeader2() && mScanCount < maxBlock )
-        {
+    virtual bool readBlockHeaders2(uint32_t maxBlock,uint32_t &blockCount){
+        if ( readBlockHeader2() && mScanCount < maxBlock ){
             mScanCount++;
             blockCount = mScanCount;
             return true;	// true means there are more blocks to read..
@@ -6267,7 +6252,12 @@ public:
 		mTransactionBlockStat.init();
 	}
 
-	virtual void setZombieDays(uint32_t zombieDays)
+    virtual void setStartFile(uint32_t startFile)
+    {
+        this->mBlockIndex = startFile;
+    }
+
+    virtual void setZombieDays(uint32_t zombieDays)
 	{
 		ZOMBIE_DAYS = zombieDays;
 	}
@@ -6324,11 +6314,9 @@ public:
 };
 
 
-BlockChain *createBlockChain(const char *rootPath)
-{
-	BlockChainImpl *b = new BlockChainImpl(rootPath);
-	if ( !b->isValid() )
-	{
+BlockChain *createBlockChain(const char *rootPath, uint32_t startFile){
+    BlockChainImpl *b = new BlockChainImpl(rootPath, startFile);
+	if ( !b->isValid() ){
 		delete b;
 		b = NULL;
 	}
