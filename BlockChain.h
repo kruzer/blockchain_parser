@@ -261,12 +261,10 @@ public:
 		uint32_t		transactionIndex;			// the sequential index number of this transaction
 	};
 
-	// This class defines a single block in the block chain.
-	class Block
-	{
+    // This class defines a single block in the block chain.
+	class Block{
 	public:
-		Block(void)
-		{
+		Block(void){
 			transactions = 0;
 			transactionCount = 0;
 			nextBlockHash = 0;
@@ -321,7 +319,8 @@ public:
 	virtual void printTransactions(uint32_t blockIndex) = 0;
 
 	virtual bool readBlockHeaders(uint32_t maxBlock,uint32_t &blockCount)= 0;
-	virtual uint32_t buildBlockChain(void) = 0;
+    virtual bool readBlockHeaders2(uint32_t maxBlock,uint32_t &blockCount)= 0;
+    virtual uint32_t buildBlockChain(void) = 0;
 
 	virtual void printAddress(const char *address) = 0;
 	virtual void printTopBalances(uint32_t tcount,float minBalance) = 0;

@@ -1,3 +1,5 @@
 *.dat
 *.csv
 *.txt
+*.pro.user
+*.out

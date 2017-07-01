@@ -43,7 +43,7 @@
 // all of the memory needed into one contiguous block you actually save an enormous amount of memory overall and also make the code run
 // orders of magnitude faster.
 
-#define SMALL_MEMORY_PROFILE 0 // a debug option so I can run/test the code on a small memory configuration machine  If this is
+#define SMALL_MEMORY_PROFILE 1 // a debug option so I can run/test the code on a small memory configuration machine  If this is
 
 static uint32_t ZOMBIE_DAYS=365*3;
 
@@ -80,28 +80,26 @@ static bool		gIsWarning=false;
 static FILE		*gWeirdSignatureFile=NULL;
 static FILE		*gAsciiSignatureFile=NULL;
 static FILE		*gLogFile=NULL;
+static FILE     *gAddrFile=NULL;
 static bool		gReportTransactionHash=false;
-static bool		gDumpBlock=false;
+static bool		gDumpBlock=true;
 
 static const char *gDummyKeyAscii = "1BadkEyPaj5oW2Uw4nY5BkYbPRYyTyqs9A";
 static uint8_t gDummyKey[25];
 static const char *gZeroByteAscii = "1zeroBTYRExUcufrTkwg27LsAvrhehtCJ";
 static uint8_t gZeroByte[25];
 
-static bool inline isASCII(char c)
-{
+static bool inline isASCII(char c){
 	bool ret = false;
 
-	if ( (c >= 32 && c < 127) || c == 13 )
-	{
+	if ( (c >= 32 && c < 127) || c == 13 ){
 		ret = true;
 	}
 
 	return ret;
 }
 
-static const char *getDateString(time_t t)
-{
+static const char *getDateString(time_t t){
 	static char scratch[1024];
 	struct tm *gtm = gmtime(&t);
 //	strftime(scratch, 1024, "%m, %d, %Y", gtm);
@@ -109,9 +107,18 @@ static const char *getDateString(time_t t)
 	return scratch;
 }
 
+static void logAddress(const char *adres){
+    if ( gAddrFile == NULL ){
+        gAddrFile = fopen("adresy.txt", "wb");
+    }
+    if ( gAddrFile ){
+        fprintf(gAddrFile,"%s\n", adres );
+        fflush(gAddrFile);
+    }
+}
 
-static void logMessage(const char *fmt,...)
-{
+
+static void logMessage(const char *fmt,...){
 	char wbuff[2048];
 	va_list arg;
 	va_start( arg, fmt );
@@ -129,10 +136,10 @@ static void logMessage(const char *fmt,...)
 	}
 }
 
-class Hash256
+class Hash256 // 32 bajtowy integer - klasa podstawowa
 {
 public:
-	Hash256(void)
+    Hash256(void) // konstruktor
 	{
 		mWord0 = 0;
 		mWord1 = 0;
@@ -140,7 +147,7 @@ public:
 		mWord3 = 0;
 	}
 
-	Hash256(const Hash256 &h)
+    Hash256(const Hash256 &h) //konstruktor 2
 	{
 		mWord0 = h.mWord0;
 		mWord1 = h.mWord1;
@@ -148,7 +155,7 @@ public:
 		mWord3 = h.mWord3;
 	}
 
-	inline Hash256(const uint8_t *src)
+    inline Hash256(const uint8_t *src) //konstruktor 3
 	{
 		mWord0 = *(const uint64_t *)(src);
 		mWord1 = *(const uint64_t *)(src+8);
@@ -156,8 +163,7 @@ public:
 		mWord3 = *(const uint64_t *)(src+24);
 	}
 
-	inline uint32_t getHash(void) const
-	{
+	inline uint32_t getHash(void) const{
 		const uint32_t *h = (const uint32_t *)&mWord0;
 		return h[0] ^ h[1] ^ h[2] ^ h[3] ^ h[4] ^ h[5] ^ h[6] ^ h[7];
 	}
@@ -168,65 +174,55 @@ public:
 	}
 
 
-	uint64_t	mWord0;
-	uint64_t	mWord1;
-	uint64_t	mWord2;
-	uint64_t	mWord3;
+    uint64_t	mWord0; // 64 bity - 8 bajtów
+    uint64_t	mWord1; // 128 b - 16 bajt
+    uint64_t	mWord2; // 192 b - 24 bajt
+    uint64_t	mWord3; // 256 b - 32 bajt = 4 x 8 bajtów
 };
 
-static void printReverseHash(const uint8_t *hash)
-{
-	if ( hash )
-	{
-		for (uint32_t i=0; i<32; i++)
-		{
+static void printReverseHash(const uint8_t *hash){
+	if ( hash ){
+		for (uint32_t i=0; i<32; i++){
 			logMessage("%02x", hash[31-i] );
 		}
 	}
-	else
-	{
+	else{
 		logMessage("NULL HASH");
 	}
 }
 
-static void fprintReverseHash(FILE *fph,const uint8_t *hash)
-{
-	if ( hash )
-	{
-		for (uint32_t i=0; i<32; i++)
-		{
+static void fprintReverseHash(FILE *fph,const uint8_t *hash){
+	if ( hash ){
+		for (uint32_t i=0; i<32; i++){
 			fprintf(fph,"%02x", hash[31-i] );
 		}
 	}
-	else
-	{
+	else{
 		fprintf(fph,"NULL HASH");
 	}
 }
 
-class BlockHeader : public Hash256
-{
+class BlockHeader : public Hash256{
 public:
-	BlockHeader(void)
-	{
+
+	BlockHeader(void){
 		mFileIndex = 0;
 		mFileOffset = 0;
 		mBlockLength = 0;
 	}
-	BlockHeader(const Hash256 &h) : Hash256(h)
-	{
+
+	BlockHeader(const Hash256 &h) : Hash256(h){
 		mFileIndex = 0;
 		mFileOffset = 0;
 		mBlockLength = 0;
 	}
-	uint32_t	mFileIndex;
-	uint32_t	mFileOffset;
-	uint32_t	mBlockLength;
-	uint8_t		mPreviousBlockHash[32];
+    uint32_t	mFileIndex; // numer pliku
+    uint32_t	mFileOffset; // offset pliku
+    uint32_t	mBlockLength; // długość bloku
+    uint8_t		mPreviousBlockHash[32]; // hash porzedniego bloku
 };
 
-struct BlockPrefix
-{
+struct BlockPrefix{
 	uint32_t	mVersion;					// The block version number.
 	uint8_t		mPreviousBlock[32];			// The 32 byte (256 bit) hash of the previous block in the blockchain
 	uint8_t		mMerkleRoot[32];			// The 32 bye merkle root hash
@@ -237,8 +233,7 @@ struct BlockPrefix
 
 
 
-static const char *getTimeString(uint32_t timeStamp)
-{
+static const char *getTimeString(uint32_t timeStamp){
 	if ( timeStamp == 0 )
 	{
 		return "NEVER";
@@ -262,26 +257,17 @@ static const char * formatNumber(int32_t number) // JWR  format this integer int
 	char * dest = &gFormat[gIndex*MAXNUMERIC];
 	gIndex++;
 	if ( gIndex == MAXFNUM ) gIndex = 0;
-
 	char scratch[512];
-
-#ifdef _MSC_VER
-	itoa(number,scratch,10);
-#else
 	snprintf(scratch, 10, "%d", number);
-#endif
-
 	char *source = scratch;
 	char *str = dest;
 	uint32_t len = (uint32_t)strlen(scratch);
-	if ( scratch[0] == '-' )
-	{
+	if ( scratch[0] == '-' ){
 		*str++ = '-';
 		source++;
 		len--;
 	}
-	for (uint32_t i=0; i<len; i++)
-	{
+	for (uint32_t i=0; i<len; i++){
 		int32_t place = (len-1)-i;
 		*str++ = source[i];
 		if ( place && (place%3) == 0 ) *str++ = ',';
@@ -291,21 +277,21 @@ static const char * formatNumber(int32_t number) // JWR  format this integer int
 	return dest;
 }
 
-class FileLocation : public Hash256
-{
+class FileLocation : public Hash256{
+
 public:
-	FileLocation(void)
-	{
+	FileLocation(void){
 
 	}
-	FileLocation(const Hash256 &h,uint32_t fileIndex,uint32_t fileOffset,uint32_t fileLength,uint32_t transactionIndex) : Hash256(h)
-	{
+
+	FileLocation(const Hash256 &h,uint32_t fileIndex,uint32_t fileOffset,uint32_t fileLength,uint32_t transactionIndex) : Hash256(h){
 		mFileIndex = fileIndex;
 		mFileOffset = fileOffset;
 		mFileLength = fileLength;
 		mTransactionIndex = transactionIndex;
 	}
-	uint32_t	mFileIndex;
+
+    uint32_t	mFileIndex;
 	uint32_t	mFileOffset;
 	uint32_t	mFileLength;
 	uint32_t	mTransactionIndex;
@@ -453,11 +439,10 @@ enum ScriptOpcodes
 #define MAX_REASONABLE_INPUTS 8192				// really can't imagine any transaction ever having more than 8192 inputs
 #define MAX_REASONABLE_OUTPUTS 8192				// really can't imagine any transaction ever having more than 8192 outputs
 
-class SignatureStat
-{
+class SignatureStat{
+
 public:
-	SignatureStat(void)
-	{
+	SignatureStat(void){
 		mFlags = 0;
 		mCount = 0;
 		mValue = 0;
@@ -472,25 +457,21 @@ public:
 static uint32_t			gSignatureStatCount=0;
 static SignatureStat	gSignatureStats[MAX_SIGNATURE_STAT];
 
-
 //********************************************
 //********************************************
 #define MAX_TRANSACTION_STAT 30000000
-class TransactionBlockStat
-{
+class TransactionBlockStat{
+
 public:
-	TransactionBlockStat(void)
-	{
+	TransactionBlockStat(void){
 		mValues = NULL;
 		init();
 	}
-	~TransactionBlockStat(void)
-	{
+	~TransactionBlockStat(void){
 		delete []mValues;
 	}
 
-	void init(void)
-	{
+	void init(void){
 		mBlockCount = 0;
 		mBlockSize = 0;
 		mTransactionCount = 0;
@@ -503,6 +484,7 @@ public:
 		mFeeValue = 0;
 		mDustCount = 0;
 	}
+
 	uint32_t	mBlockCount;
 	uint32_t	mBlockSize;
 	uint32_t	mTransactionCount;
@@ -518,12 +500,11 @@ public:
 };
 
 
-class BlockImpl : public BlockChain::Block
-{
+class BlockImpl : public BlockChain::Block{
+
 public:
 	// Read one byte from the block-chain input stream.
-	inline uint8_t readU8(void)
-	{
+	inline uint8_t readU8(void){
 		assert( (mBlockRead+sizeof(uint8_t)) <= mBlockEnd );
 		uint8_t ret = *(uint8_t *)mBlockRead;
 		mBlockRead+=sizeof(uint8_t);
@@ -531,8 +512,7 @@ public:
 	}
 
 	// Read two bytes from the block-chain input stream.
-	inline uint16_t readU16(void)
-	{
+	inline uint16_t readU16(void){
 		assert( (mBlockRead+sizeof(uint16_t)) <= mBlockEnd );
 		uint16_t ret = *(uint16_t *)mBlockRead;
 		mBlockRead+=sizeof(uint16_t);
@@ -540,8 +520,7 @@ public:
 	}
 
 	// Read four bytes from the block-chain input stream.
-	inline uint32_t readU32(void)
-	{
+	inline uint32_t readU32(void){
 		assert( (mBlockRead+sizeof(uint32_t)) <= mBlockEnd );
 		uint32_t ret = *(uint32_t *)mBlockRead;
 		mBlockRead+=sizeof(uint32_t);
@@ -549,8 +528,7 @@ public:
 	}
 
 	// Read eight bytes from the block-chain input stream.
-	inline uint64_t readU64(void)
-	{
+	inline uint64_t readU64(void){
 		assert( (mBlockRead+sizeof(uint64_t)) <= mBlockEnd );
 		uint64_t ret = *(uint64_t *)mBlockRead;
 		mBlockRead+=sizeof(uint64_t);
@@ -558,8 +536,7 @@ public:
 	}
 
 	// Return the current stream pointer representing a 32byte hash and advance the read pointer accordingly
-	inline const uint8_t *readHash(void)
-	{
+	inline const uint8_t *readHash(void){
 		const uint8_t *ret = mBlockRead;
 		assert( (mBlockRead+32) <= mBlockEnd );
 		mBlockRead+=32;
@@ -603,8 +580,7 @@ public:
 	}
 
 	// Get the current read buffer address and advance the stream buffer by this length; used to get the address of input/output scripts
-	inline const uint8_t * getReadBufferAdvance(uint32_t readLength)
-	{
+	inline const uint8_t * getReadBufferAdvance(uint32_t readLength){
 		const uint8_t *ret = mBlockRead;
 		mBlockRead+=readLength;
 		assert( mBlockRead <= mBlockEnd );
@@ -613,8 +589,7 @@ public:
 
 
 	// Read a transaction input
-	bool readInput(BlockChain::BlockInput &input)
-	{
+	bool readInput(BlockChain::BlockInput &input){
 		bool ret = true;
 
 		input.transactionHash = readHash();	// read the transaction hash
@@ -622,18 +597,15 @@ public:
 		input.responseScriptLength = readVariableLengthInteger();	// read the length of the script
 		assert( input.responseScriptLength < MAX_REASONABLE_SCRIPT_LENGTH );
 
-		if ( input.responseScriptLength >= 8192 )
-		{
+		if ( input.responseScriptLength >= 8192 ){
 			logMessage("Block: %d : Unreasonably large input script length of %d bytes.\r\n", gBlockIndex, input.responseScriptLength );
 		}
 
-		if ( input.responseScriptLength < MAX_REASONABLE_SCRIPT_LENGTH )
-		{
+		if ( input.responseScriptLength < MAX_REASONABLE_SCRIPT_LENGTH ){
 			input.responseScript = input.responseScriptLength ? getReadBufferAdvance(input.responseScriptLength) : NULL;	// get the script buffer pointer; and advance the read location
 			input.sequenceNumber = readU32();
 		}
-		else
-		{
+		else{
 			logMessage("Block %d : Outrageous sized input script of %d bytes!  Shutting down.\r\n", gBlockIndex, input.responseScriptLength );
 			exit(1);
 		}
@@ -998,6 +970,287 @@ public:
 		return ret;
 	}
 
+    //mikey
+    bool readOutput2(BlockChain::BlockOutput &output)
+    {
+        bool ret = true;
+
+        new ( &output ) BlockChain::BlockOutput;
+
+        output.value = readU64();	// Read the value of the transaction
+        blockReward+=output.value;
+        output.challengeScriptLength = readVariableLengthInteger();
+        assert ( output.challengeScriptLength < MAX_REASONABLE_SCRIPT_LENGTH );
+
+        if ( output.challengeScriptLength >= 8192 )
+        {
+            logMessage("Block %d : Unreasonably large output script length of %d bytes.\r\n", gBlockIndex, output.challengeScriptLength );
+        }
+        else if ( output.challengeScriptLength > MAX_REASONABLE_SCRIPT_LENGTH )
+        {
+            logMessage("Block %d : output script too long %d bytes!\r\n", gBlockIndex, output.challengeScriptLength );
+            exit(1);
+        }
+
+        output.challengeScript = output.challengeScriptLength ? getReadBufferAdvance(output.challengeScriptLength) : NULL; // get the script buffer pointer and advance the read location
+
+        if ( output.challengeScript )
+        {
+            uint8_t lastInstruction = output.challengeScript[output.challengeScriptLength-1];
+            if ( output.challengeScriptLength == 67 && output.challengeScript[0] == 65  && output.challengeScript[66]== OP_CHECKSIG )
+            {
+                output.publicKey[0] = output.challengeScript+1;
+                output.keyType = BlockChain::KT_UNCOMPRESSED_PUBLIC_KEY;
+            }
+            if ( output.challengeScriptLength == 40 && output.challengeScript[0] == OP_RETURN )
+            {
+                output.publicKey[0] = &output.challengeScript[1];
+                output.keyType = BlockChain::KT_STEALTH;
+            }
+            else if ( output.challengeScriptLength == 66 && output.challengeScript[65]== OP_CHECKSIG )
+            {
+                output.publicKey[0] = output.challengeScript;
+                output.keyType = BlockChain::KT_UNCOMPRESSED_PUBLIC_KEY;
+            }
+            else if ( output.challengeScriptLength == 35 && output.challengeScript[34] == OP_CHECKSIG )
+            {
+                output.publicKey[0] = &output.challengeScript[1];
+                output.keyType = BlockChain::KT_COMPRESSED_PUBLIC_KEY;
+            }
+            else if ( output.challengeScriptLength == 33 && output.challengeScript[0] == 0x20 )
+            {
+                output.publicKey[0] = &output.challengeScript[1];
+                output.keyType = BlockChain::KT_TRUNCATED_COMPRESSED_KEY;
+            }
+            else if ( output.challengeScriptLength == 23 &&
+                output.challengeScript[0] == OP_HASH160 &&
+                output.challengeScript[1] == 20 &&
+                output.challengeScript[22] == OP_EQUAL )
+            {
+                output.publicKey[0] = output.challengeScript+2;
+                output.keyType = BlockChain::KT_SCRIPT_HASH;
+            }
+            else if ( output.challengeScriptLength >= 25 &&
+                      output.challengeScript[0] == OP_DUP &&
+                      output.challengeScript[1] == OP_HASH160 &&
+                      output.challengeScript[2] == 20 )
+            {
+                output.publicKey[0] = output.challengeScript+3;
+                output.keyType = BlockChain::KT_RIPEMD160;
+            }
+            else if ( output.challengeScriptLength == 5 &&
+                      output.challengeScript[0] == OP_DUP &&
+                      output.challengeScript[1] == OP_HASH160 &&
+                      output.challengeScript[2] == OP_0 &&
+                      output.challengeScript[3] == OP_EQUALVERIFY &&
+                      output.challengeScript[4] == OP_CHECKSIG )
+            {
+                logMessage("WARNING: Unusual but expected output script. Block %s : Transaction: %s : OutputIndex: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex) );
+                gIsWarning = true;
+            }
+            else if ( lastInstruction == OP_CHECKMULTISIG && output.challengeScriptLength > 25 ) // looks to be a multi-sig
+            {
+                const uint8_t *scanBegin = output.challengeScript;
+                const uint8_t *scanEnd = &output.challengeScript[output.challengeScriptLength-2];
+                bool expectedPrefix = false;
+                bool expectedPostfix = false;
+                switch ( *scanBegin )
+                {
+                    case OP_0:
+                    case OP_1:
+                    case OP_2:
+                    case OP_3:
+                    case OP_4:
+                    case OP_5:
+                        expectedPrefix = true;
+                        break;
+                    default:
+//						assert(0); // unexpected
+                        break;
+                }
+                switch ( *scanEnd )
+                {
+                    case OP_1:
+                    case OP_2:
+                    case OP_3:
+                    case OP_4:
+                    case OP_5:
+                        expectedPostfix = true;
+                        break;
+                    default:
+//						assert(0); // unexpected
+                        break;
+                }
+                if ( expectedPrefix && expectedPostfix )
+                {
+                    scanBegin++;
+                    uint32_t keyIndex = 0;
+                    while ( keyIndex < 5 && scanBegin < scanEnd )
+                    {
+                        if ( *scanBegin == 0x21 )
+                        {
+                            output.keyType = BlockChain::KT_MULTISIG;
+                            scanBegin++;
+                            output.publicKey[keyIndex] = scanBegin;
+                            scanBegin+=0x21;
+                            uint32_t bitMask = 1<<keyIndex;
+                            output.multiSigFormat|=bitMask; // turn this bit on if it is in compressed format
+                            keyIndex++;
+                        }
+                        else if ( *scanBegin == 0x41 )
+                        {
+                            output.keyType = BlockChain::KT_MULTISIG;
+                            scanBegin++;
+                            output.publicKey[keyIndex] = scanBegin;
+                            scanBegin+=0x41;
+                            keyIndex++;
+                        }
+                        else
+                        {
+                            break; //
+                        }
+                    }
+                }
+                if ( output.publicKey[0] == NULL )
+                {
+                    logMessage("****MULTI_SIG WARNING: Unable to decipher multi-sig output. Block %s : Transaction: %s : OutputIndex: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex) );
+                    gIsWarning = true;
+                }
+            }
+            else
+            {
+                // Ok..we are going to scan for this pattern.. OP_DUP, OP_HASH160, 0x14 then exactly 20 bytes after 0x88,0xAC
+                // 25...
+                if ( output.challengeScriptLength > 25 )
+                {
+                    uint32_t endIndex = output.challengeScriptLength-25;
+                    for (uint32_t i=0; i<endIndex; i++)
+                    {
+                        const uint8_t *scan = &output.challengeScript[i];
+                        if ( scan[0] == OP_DUP &&
+                             scan[1] == OP_HASH160 &&
+                             scan[2] == 20 &&
+                             scan[23] == OP_EQUALVERIFY &&
+                             scan[24] == OP_CHECKSIG )
+                        {
+                            output.publicKey[0] = &scan[3];
+                            output.keyType = BlockChain::KT_RIPEMD160;
+                            logMessage("WARNING: Unusual output script. Block %s : Transaction: %s : OutputIndex: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex) );
+                            gIsWarning = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ( output.publicKey[0] == NULL )
+            {
+                logMessage("==========================================\r\n");
+                logMessage("FAILED TO LOCATE PUBLIC KEY\r\n");
+                logMessage("ChallengeScriptLength: %d bytes long\r\n", output.challengeScriptLength );
+                for (uint32_t i=0; i<output.challengeScriptLength; i++)
+                {
+                    logMessage("%02x ", output.challengeScript[i] );
+                    if ( ((i+16)&15) == 0 )
+                    {
+                        logMessage("\r\n");
+                    }
+                }
+                logMessage("\r\n");
+                logMessage("==========================================\r\n");
+                logMessage("\r\n");
+            }
+        }
+        else
+        {
+            logMessage("Block %d : has a zero byte length output script?\r\n", gBlockIndex);
+            gReportTransactionHash = true;
+        }
+
+        if ( !output.publicKey[0] )
+        {
+            if ( output.challengeScriptLength == 0 )
+            {
+                output.publicKey[0] = &gZeroByte[1];
+            }
+            else
+            {
+                output.publicKey[0] = &gDummyKey[1];
+            }
+            output.keyType = BlockChain::KT_RIPEMD160;
+            logMessage("WARNING: Failed to decode public key in output script. Block %s : Transaction: %s : OutputIndex: %s scriptLength: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex), formatNumber(output.challengeScriptLength) );
+            gReportTransactionHash = true;
+            gIsWarning = true;
+        }
+
+
+        switch ( output.keyType )
+        {
+            case BlockChain::KT_RIPEMD160:
+                bitcoinRIPEMD160ToAddress(output.publicKey[0],output.addresses[0].address);
+                break;
+            case BlockChain::KT_SCRIPT_HASH:
+                bitcoinRIPEMD160ToScriptAddress(output.publicKey[0],output.addresses[0].address);
+                break;
+            case BlockChain::KT_STEALTH:
+                bitcoinRIPEMD160ToAddress(output.publicKey[0],output.addresses[0].address);
+                break;
+            case BlockChain::KT_UNCOMPRESSED_PUBLIC_KEY:
+                {
+                    bitcoinPublicKeyToAddress(output.publicKey[0],output.addresses[0].address);
+                }
+                break;
+            case BlockChain::KT_COMPRESSED_PUBLIC_KEY:
+                {
+                    bitcoinCompressedPublicKeyToAddress(output.publicKey[0],output.addresses[0].address);
+                }
+                break;
+            case BlockChain::KT_TRUNCATED_COMPRESSED_KEY:
+                {
+                    uint8_t key[33];
+                    key[0] = 0x2;
+                    memcpy(&key,output.publicKey[0],32);
+                    bitcoinCompressedPublicKeyToAddress(key,output.addresses[0].address);
+                }
+                break;
+            case BlockChain::KT_MULTISIG:
+                {
+                    for (uint32_t i=0; i<MAX_MULTISIG; i++)
+                    {
+                        const uint8_t *key = output.publicKey[i];
+                        if ( key == NULL )
+                            break;
+                        uint32_t mask = 1<<i;
+                        if ( output.multiSigFormat & mask )
+                        {
+                            bitcoinCompressedPublicKeyToAddress(output.publicKey[i],output.addresses[i].address);
+                        }
+                        else
+                        {
+                            bitcoinPublicKeyToAddress(output.publicKey[i],output.addresses[i].address);
+                        }
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+        output.keyTypeName = getKeyType(output.keyType);
+        getAsciiAddress(output);
+
+        logAddress(output.asciiAddress);
+
+//		if ( output.keyType == BlockChain::KT_SCRIPT_HASH )
+//		{
+//			logMessage("ScriptHash: %s\r\n", output.asciiAddress );
+//		}
+
+        if ( gReportTransactionHash )
+        {
+            gIsWarning = true;
+        }
+        return ret;
+    }
+
 	// Read a single transaction
 	bool readTransaction(BlockChain::BlockTransaction &transaction,
 						uint32_t &transactionIndex,
@@ -1020,59 +1273,48 @@ public:
 
 		transaction.inputCount = readVariableLengthInteger();
 		assert( transaction.inputCount < MAX_REASONABLE_INPUTS );
-		if ( transaction.inputCount >= MAX_REASONABLE_INPUTS )
-		{
+		if ( transaction.inputCount >= MAX_REASONABLE_INPUTS ){
 			logMessage("Invalid number of inputs found! %d\r\n", transaction.inputCount );
 			exit(1);
 		}
 		transaction.inputs = &mInputs[totalInputCount];
 		totalInputCount+=transaction.inputCount;
 		assert( totalInputCount < MAX_BLOCK_INPUTS );
-		if ( totalInputCount >= MAX_BLOCK_INPUTS )
-		{
+		if ( totalInputCount >= MAX_BLOCK_INPUTS ){
 			logMessage("Invalid number of block inputs: %d\r\n", totalInputCount );
 			exit(1);
 		}
-		if ( totalInputCount < MAX_BLOCK_INPUTS )
-		{
-			for (uint32_t i=0; i<transaction.inputCount; i++)
-			{
+		if ( totalInputCount < MAX_BLOCK_INPUTS ){
+			for (uint32_t i=0; i<transaction.inputCount; i++){
 				BlockChain::BlockInput &input = transaction.inputs[i];
 				ret = readInput(input);	// read the input
-				if ( !ret )
-				{
+				if ( !ret ){
 					logMessage("Failed to read input!\r\n");
 					exit(1);
 //					break;
 				}
 			}
 		}
-		if ( ret )
-		{
+		if ( ret ){
 			transaction.outputCount = readVariableLengthInteger();
 			assert( transaction.outputCount < MAX_REASONABLE_OUTPUTS );
-			if ( transaction.outputCount > MAX_REASONABLE_OUTPUTS )
-			{
+			if ( transaction.outputCount > MAX_REASONABLE_OUTPUTS ){
 				logMessage("Exceeded maximum reasonable outputs.\r\n");
 				exit(1);
 			}
 			transaction.outputs = &mOutputs[totalOutputCount];
 			totalOutputCount+=transaction.outputCount;
 			assert( totalOutputCount < MAX_BLOCK_OUTPUTS );
-			if ( totalOutputCount >= MAX_BLOCK_OUTPUTS )
-			{
+			if ( totalOutputCount >= MAX_BLOCK_OUTPUTS ){
 				logMessage("Invalid number of block outputs. %d\r\n", totalOutputCount );
 				exit(1);
 			}
-			if ( totalOutputCount < MAX_BLOCK_OUTPUTS )
-			{
-				for (uint32_t i=0; i<transaction.outputCount; i++)
-				{
+			if ( totalOutputCount < MAX_BLOCK_OUTPUTS ){
+				for (uint32_t i=0; i<transaction.outputCount; i++){
 					gOutputIndex = i;
 					BlockChain::BlockOutput &output = transaction.outputs[i];
 					ret = readOutput(output);
-					if ( !ret )
-					{
+					if ( !ret ){
 						logMessage("Failed to read output.\r\n");
 						exit(1);
 //						break;
@@ -1090,8 +1332,7 @@ public:
 					computeSHA256(transactionBegin,transaction.transactionLength,transaction.transactionHash);
 					computeSHA256(transaction.transactionHash,32,transaction.transactionHash);
 
-					if ( gReportTransactionHash )
-					{
+					if ( gReportTransactionHash ){
 						logMessage("TRANSACTION HASH:" );
 						printReverseHash(transaction.transactionHash);
 						logMessage("\r\n");
@@ -1105,7 +1346,100 @@ public:
 		return ret;
 	}
 
-	// @see this link for detailed documentation:
+    bool readTransaction2(BlockChain::BlockTransaction &transaction,
+                        uint32_t &transactionIndex,
+                        uint32_t tindex){
+        bool ret = false;
+        const uint8_t *transactionBegin = mBlockRead;
+        transaction.transactionVersionNumber = readU32(); // read the transaction version number; always expect it to be 1
+
+        if ( transaction.transactionVersionNumber == 1 || transaction.transactionVersionNumber == 2 )
+        {
+        }
+        else
+        {
+            gIsWarning = true;
+            logMessage("Encountered unusual and unexpected transaction version number of [%d] for transaction #%d\r\n", transaction.transactionVersionNumber, tindex );
+        }
+
+        transaction.inputCount = readVariableLengthInteger();
+        assert( transaction.inputCount < MAX_REASONABLE_INPUTS );
+        if ( transaction.inputCount >= MAX_REASONABLE_INPUTS ){
+            logMessage("Invalid number of inputs found! %d\r\n", transaction.inputCount );
+            exit(1);
+        }
+        transaction.inputs = &mInputs[totalInputCount];
+        totalInputCount+=transaction.inputCount;
+        assert( totalInputCount < MAX_BLOCK_INPUTS );
+        if ( totalInputCount >= MAX_BLOCK_INPUTS ){
+            logMessage("Invalid number of block inputs: %d\r\n", totalInputCount );
+            exit(1);
+        }
+        if ( totalInputCount < MAX_BLOCK_INPUTS ){
+            for (uint32_t i=0; i<transaction.inputCount; i++){
+                BlockChain::BlockInput &input = transaction.inputs[i];
+                ret = readInput(input);	// read the input
+                if ( !ret ){
+                    logMessage("Failed to read input!\r\n");
+                    exit(1);
+//					break;
+                }
+            }
+        }
+        if ( ret ){
+            transaction.outputCount = readVariableLengthInteger();
+            assert( transaction.outputCount < MAX_REASONABLE_OUTPUTS );
+            if ( transaction.outputCount > MAX_REASONABLE_OUTPUTS ){
+                logMessage("Exceeded maximum reasonable outputs.\r\n");
+                exit(1);
+            }
+            transaction.outputs = &mOutputs[totalOutputCount];
+            totalOutputCount+=transaction.outputCount;
+            assert( totalOutputCount < MAX_BLOCK_OUTPUTS );
+            if ( totalOutputCount >= MAX_BLOCK_OUTPUTS ){
+                logMessage("Invalid number of block outputs. %d\r\n", totalOutputCount );
+                exit(1);
+            }
+            if ( totalOutputCount < MAX_BLOCK_OUTPUTS ){
+                for (uint32_t i=0; i<transaction.outputCount; i++){
+                    gOutputIndex = i;
+                    BlockChain::BlockOutput &output = transaction.outputs[i];
+                    ret = readOutput2(output);
+                    if ( !ret ){
+                        logMessage("Failed to read output.\r\n");
+                        exit(1);
+//						break;
+                    }
+                }
+
+                transaction.lockTime = readU32();
+                /*
+
+                {
+                    transaction.transactionLength = (uint32_t)(mBlockRead - transactionBegin);
+                    transaction.fileIndex = fileIndex;
+                    transaction.fileOffset = fileOffset + (uint32_t)(transactionBegin-mBlockData);
+                    transaction.transactionIndex = transactionIndex;
+                    transactionIndex++;
+                    computeSHA256(transactionBegin,transaction.transactionLength,transaction.transactionHash);
+                    computeSHA256(transaction.transactionHash,32,transaction.transactionHash);
+
+                    if ( gReportTransactionHash ){
+                        logMessage("TRANSACTION HASH:" );
+                        printReverseHash(transaction.transactionHash);
+                        logMessage("\r\n");
+                        gReportTransactionHash = false;
+                    }
+
+                } */
+
+            }
+        }
+        return ret;
+    }
+
+
+    // @see this link for detailed documentation:
 	//
 	// http://james.lab6.com/2012/01/12/bitcoin-285-bytes-that-changed-the-world/
 	//
@@ -1134,8 +1468,7 @@ public:
 	//			: (b) Read the length of the challenge script.
 	//			: (c) Read the challenge script
 	//Step #9 Read the LockTime; a value currently always hard-coded to zero
-	bool processBlockData(const void *blockData,uint32_t blockLength,uint32_t &transactionIndex)
-	{
+	bool processBlockData(const void *blockData,uint32_t blockLength,uint32_t &transactionIndex){
 		bool ret = true;
 		mBlockData = (const uint8_t *)blockData;
 		mBlockRead = mBlockData;	// Set the block-read scan pointer.
@@ -1148,20 +1481,17 @@ public:
 		nonce = readU32();	// Get the 'nonce' random number.
 		transactionCount = readVariableLengthInteger();	// Read the number of transactions
 		assert( transactionCount < MAX_BLOCK_TRANSACTION );
-		if ( transactionCount >= MAX_BLOCK_TRANSACTION )
-		{
+		if ( transactionCount >= MAX_BLOCK_TRANSACTION ){
 			logMessage("Too many transactions in the block: %d\r\n", transactionCount );
 			exit(1);
 		}
-		if ( transactionCount < MAX_BLOCK_TRANSACTION )
-		{
+		if ( transactionCount < MAX_BLOCK_TRANSACTION ){
 			transactions = mTransactions;	// Assign the transactions buffer pointer
-			for (uint32_t i=0; i<transactionCount; i++)
-			{
+			for (uint32_t i=0; i<transactionCount; i++){
 				gTransactionIndex = i;
 				BlockChain::BlockTransaction &b = transactions[i];
 				if ( !readTransaction(b,transactionIndex,i) )	// Read the transaction; if it failed; then abort processing the block chain
-				{
+                {
 					ret = false;
 					break;
 				}
@@ -1171,7 +1501,38 @@ public:
 		return ret;
 	}
 
-	const BlockChain::BlockTransaction *processTransactionData(const void *transactionData,uint32_t transactionLength)
+    bool processBlockData2(const void *blockData,uint32_t blockLength,uint32_t &transactionIndex){
+        bool ret = true;
+        mBlockData = (const uint8_t *)blockData;
+        mBlockRead = mBlockData;	// Set the block-read scan pointer.
+        mBlockEnd = &mBlockData[blockLength]; // Mark the end of block pointer
+        blockFormatVersion = readU32();	// Read the format version
+        previousBlockHash = readHash();  // get the address of the hash
+        merkleRoot = readHash();	// Get the address of the merkle root hash
+        gBlockTime = timeStamp = readU32();	// Get the timestamp
+        bits = readU32();	// Get the bits field
+        nonce = readU32();	// Get the 'nonce' random number.
+        transactionCount = readVariableLengthInteger();	// Read the number of transactions
+        assert( transactionCount < MAX_BLOCK_TRANSACTION );
+        if ( transactionCount >= MAX_BLOCK_TRANSACTION ){
+            logMessage("Too many transactions in the block: %d\r\n", transactionCount );
+            exit(1);
+        }
+        if ( transactionCount < MAX_BLOCK_TRANSACTION ){
+            transactions = mTransactions;	// Assign the transactions buffer pointer
+            for (uint32_t i=0; i<transactionCount; i++){
+                gTransactionIndex = i;
+                BlockChain::BlockTransaction &b = transactions[i];
+                if ( !readTransaction2(b,transactionIndex,i) ){	// Read the transaction; if it failed; then abort processing the block chain
+                    ret = false;
+                    break;
+                }
+            }
+        }
+        return ret;
+    }
+
+    const BlockChain::BlockTransaction *processTransactionData(const void *transactionData,uint32_t transactionLength)
 	{
 		uint32_t transactionIndex=0;
 		BlockChain::BlockTransaction *ret = &mTransactions[0];
@@ -2240,7 +2601,7 @@ public:
 
 		if ( fph == NULL )
 		{
-			logMessage("Failed to open file 'DumpByAge.csv' for write access.\r\n");
+            logMessage("Failed to open file 'DumpByAge.csv' for write access.\r\n");
 			return;
 		}
 		tipJar(fph);
@@ -4143,7 +4504,7 @@ public:
 		mTotalTransactionCount = 0;
 		mBlockHeaderMap.setMemoryMapFileName("@BlockHeaderMap.mmap");
 		mTransactionMap.setMemoryMapFileName("@TransactionMap.mmap");
-		openBlock();	// open the input file
+        openNextBlock();	// open the input file
 	}
 
 	// Close all blockchain files which have been opended so far
@@ -4175,7 +4536,7 @@ public:
 	}
 
 	// Open the next data file in the block-chain sequence
-	bool openBlock(void)
+    bool openNextBlock(void)
 	{
 		bool ret = false;
 
@@ -4217,7 +4578,7 @@ public:
 	// Returns true if we successfully opened the block-chain input file
 	bool isValid(void)
 	{
-		return mBlockChain[0] ? true : false;
+        return mBlockChain[0] ? true : false;
 	}
 
 	void processTransactions(Block &block)
@@ -4268,7 +4629,7 @@ public:
 			ret = &mSingleReadBlock;
 			if ( gDumpBlock )
 			{
-				gDumpBlock = false;
+                //gDumpBlock = false;
 				logMessage("\r\n");
 				logMessage("\r\n");
 				printBlock(ret);
@@ -4286,7 +4647,7 @@ public:
 
 		if ( blockIndex >= mBlockCount ) return false;
 		BlockHeader &header = *mBlockHeaders[blockIndex];
-		FILE *fph = mBlockChain[header.mFileIndex];
+        FILE *fph = mBlockChain[header.mFileIndex];
 		if ( fph )
 		{
 			block.blockIndex = blockIndex;
@@ -4440,6 +4801,44 @@ public:
 		gIsWarning = false;
 		return ret;
 	}
+
+    virtual bool readBlock2(BlockImpl &block, BlockHeader &header, FILE *fph, uint32_t blockIndex){
+        bool ret = false;
+        if ( fph ){
+            block.blockIndex = blockIndex;
+            block.warning = false;
+//            fseek(fph,header.mFileOffset,SEEK_SET); // to już ustawione
+            gBlockIndex = blockIndex;
+            block.blockLength = header.mBlockLength;
+            block.blockReward = 0;
+            block.totalInputCount = 0;
+            block.totalOutputCount = 0;
+            block.fileIndex = header.mFileIndex;
+            block.fileOffset = header.mFileOffset;
+            block.blockLength = header.mBlockLength;
+
+            uint8_t *blockData = mBlockDataBuffer;
+            size_t r = fread(blockData,block.blockLength,1,fph); // read the rest of the block (less the 8 byte header we have already consumed)
+
+            if ( r == 1 ){
+                computeSHA256(blockData,4+32+32+4+4+4,block.computedBlockHash);
+                computeSHA256(block.computedBlockHash,32,block.computedBlockHash);
+                ret = block.processBlockData2(blockData,block.blockLength,mTransactionCount);
+//                if ( ret ) {
+//                    processTransactions(block);
+//                }
+            }
+            else
+            {
+                logMessage("Failed to read input block.  BlockChain corrupted.\r\n");
+                exit(1);
+            }
+        }
+        block.warning = gIsWarning;
+        gIsWarning = false;
+        return ret;
+    }
+
 
 
 	virtual void printBlock(const Block *block) // prints the contents of the block to the console for debugging purposes
@@ -4828,7 +5227,7 @@ public:
 			if ( r == 0 )
 			{
 				mBlockIndex++;	// advance to the next data file if we couldn't read any further in the current data file
-				if ( openBlock() )
+                if ( openNextBlock() )
 				{
 					fph = mBlockChain[mBlockIndex];
 					r = fread(&magicID,sizeof(magicID),1,fph); // if we opened up a new file; read the magic id from it's first block.
@@ -4872,7 +5271,7 @@ public:
 				else
 				{
 					mBlockIndex++;	// advance to the next data file if we couldn't read any further in the current data file
-					if ( openBlock() )
+                    if ( openNextBlock() )
 					{
 						fph = mBlockChain[mBlockIndex];
 						r = fread(&magicID,sizeof(magicID),1,fph); // if we opened up a new file; read the magic id from it's first block.
@@ -4893,8 +5292,8 @@ public:
 			}
 			if ( r == 1 )	// Ok, this is a valid block, let's continue
 			{
-				BlockHeader header;
-				BlockPrefix prefix;
+                BlockHeader header; // block info
+                BlockPrefix prefix; // block header
 				header.mFileIndex = mBlockIndex;
 				r = fread(&header.mBlockLength,sizeof(header.mBlockLength),1,fph); // read the length of the block
 				header.mFileOffset = (uint32_t)ftell(fph);
@@ -4904,17 +5303,18 @@ public:
 					if ( header.mBlockLength < MAX_BLOCK_SIZE )
 					{
 						r = fread(&prefix,sizeof(prefix),1,fph); // read the rest of the block (less the 8 byte header we have already consumed)
-						if ( r == 1 )
+                        int z = sizeof(prefix);
+                        if ( r == 1 )
 						{
-							Hash256 *blockHash = static_cast< Hash256 *>(&header);
-							memcpy(header.mPreviousBlockHash,prefix.mPreviousBlock,32);
+                            Hash256 *blockHash = static_cast< Hash256 *>(&header); // blockHash wskazuje na block Info
+                            memcpy(header.mPreviousBlockHash,prefix.mPreviousBlock,32);// kopiuje wpis prev... do info
 							computeSHA256((uint8_t *)&prefix,sizeof(prefix),(uint8_t *)blockHash);
 							computeSHA256((uint8_t *)blockHash,32,(uint8_t *)blockHash);
 							uint32_t currentFileOffset = ftell(fph); // get the current file offset.
 							uint32_t advance = header.mBlockLength - sizeof(BlockPrefix);
 							currentFileOffset+=advance;
 							fseek(fph,currentFileOffset,SEEK_SET); // skip past the block to get to the next header.
-							mLastBlockHeader = mBlockHeaderMap.insert(header);
+                            mLastBlockHeader = mBlockHeaderMap.insert(header); // zapisanie block info w HashTab
 							ok = true;
 						}
 					}
@@ -4924,7 +5324,100 @@ public:
 		return ok;
 	}
 
-	virtual uint32_t getBlockCount(void) const
+    bool readBlockHeader2(void){
+        bool ok = false;
+        FILE *fph = mBlockChain[mBlockIndex];
+        if ( fph ){
+            uint32_t magicID = 0;
+            uint32_t lastBlockRead = (uint32_t)ftell(fph);
+            size_t r = fread(&magicID,sizeof(magicID),1,fph);	// Attempt to read the magic id for the next block
+            if ( r == 0 ){
+                mBlockIndex++;	// advance to the next data file if we couldn't read any further in the current data file
+                if ( openNextBlock() ){
+                    fph = mBlockChain[mBlockIndex];
+                    r = fread(&magicID,sizeof(magicID),1,fph); // if we opened up a new file; read the magic id from it's first block.
+                    lastBlockRead = ftell(fph);
+                }
+            }
+            // If after reading the previous block, we did not encounter a block header, we need to scan for the next block header..
+            if ( r == 1 && magicID != MAGIC_ID ){
+                fseek(fph,lastBlockRead,SEEK_SET);
+                logMessage("Warning: Missing block-header; scanning for next one.\r\n");
+                uint8_t *temp = (uint8_t *)::malloc(MAX_BLOCK_SIZE);
+                memset(temp,0,MAX_BLOCK_SIZE);
+                uint32_t c = (uint32_t)fread(temp,1,MAX_BLOCK_SIZE,fph);
+                bool found = false;
+                if ( c > 0 ){
+                    for (uint32_t i=0; i<c; i++){
+                        const uint32_t *check = (const uint32_t *)&temp[i];
+                        if ( *check == MAGIC_ID ){
+                            logMessage("Found the next block header after skipping: %s bytes forward in the file.\r\n", formatNumber(i) );
+                            lastBlockRead+=i; // advance to this location.
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                ::free(temp);
+                if ( found ){
+                    fseek(fph,lastBlockRead,SEEK_SET);
+                    r = fread(&magicID,sizeof(magicID),1,fph); // if we opened up a new file; read the magic id from it's first block.
+                    assert( magicID == MAGIC_ID );
+                }
+
+                if ( found ) {// if we found it before the EOF, we are cool, otherwise, we need to advance to the next file.
+                } else {
+                    mBlockIndex++;	// advance to the next data file if we couldn't read any further in the current data file
+                    if ( openNextBlock() ) {
+                        fph = mBlockChain[mBlockIndex];
+                        r = fread(&magicID,sizeof(magicID),1,fph); // if we opened up a new file; read the magic id from it's first block.
+                        if ( r == 1 ) {
+                            if ( magicID != MAGIC_ID ) {
+                                logMessage("Advanced to the next data file; but it does not start with a valid block.  Aborting reading the block-chain.\r\n");
+                                r = 0;
+                            }
+                        }
+                    } else {
+                        r = 0; // done
+                    }
+                }
+            }
+            if ( r == 1 ){	// Ok, this is a valid block, let's continue
+                BlockHeader header; // block info
+                BlockPrefix prefix; // block header
+                header.mFileIndex = mBlockIndex;
+                r = fread(&header.mBlockLength,sizeof(header.mBlockLength),1,fph); // read the length of the block
+                header.mFileOffset = (uint32_t)ftell(fph);
+                if ( r == 1 ){
+                    assert( header.mBlockLength < MAX_BLOCK_SIZE ); // make sure the block length does not exceed our maximum expected ever possible block size
+                    if ( header.mBlockLength < MAX_BLOCK_SIZE ){
+                        r = fread(&prefix,sizeof(prefix),1,fph); // read the rest of the block (less the 8 byte header we have already consumed)
+                        int z = sizeof(prefix);
+                        if ( r == 1 ){
+                            Hash256 *blockHash = static_cast< Hash256 *>(&header); // blockHash wskazuje na block Info
+                            memcpy(header.mPreviousBlockHash,prefix.mPreviousBlock,32);// kopiuje wpis prev... do info
+                            computeSHA256((uint8_t *)&prefix,sizeof(prefix),(uint8_t *)blockHash);
+                            computeSHA256((uint8_t *)blockHash,32,(uint8_t *)blockHash);
+                            uint32_t currentFileOffset = ftell(fph); // get the current file offset.
+                            uint32_t advance = header.mBlockLength - sizeof(BlockPrefix);
+                            currentFileOffset+=advance;
+                            // tu odczyt transakcji ...
+                            // najpierw cofamy do mFileOffset
+                            fseek(fph,sizeof(prefix) * -1,SEEK_CUR);
+                            readBlock2(mSingleReadBlock, header, fph, mBlockIndex);
+
+                            //fseek(fph,currentFileOffset,SEEK_SET); // skip past the block to get to the next header.
+//                            mLastBlockHeader = mBlockHeaderMap.insert(header); // zapisanie block info w HashTab
+                            ok = true;
+                        }
+                    }
+                }
+            }
+        }
+        return ok;
+    }
+
+    virtual uint32_t getBlockCount(void) const
 	{
 		return mBlockCount;
 	}
@@ -4992,7 +5485,19 @@ public:
 		return false;
 	}
 
-	virtual void printAddress(const char *address)
+    virtual bool readBlockHeaders2(uint32_t maxBlock,uint32_t &blockCount)
+    {
+        if ( readBlockHeader2() && mScanCount < maxBlock )
+        {
+            mScanCount++;
+            blockCount = mScanCount;
+            return true;	// true means there are more blocks to read..
+        }
+
+        return false;
+    }
+
+    virtual void printAddress(const char *address)
 	{
 		mTransactionFactory->printAddress(address);
 	}
@@ -5399,7 +5904,7 @@ public:
 				fprintf(fph,"\"");
 				fprintf(fph,",");
 
-				// Finally, print out the complete hex dump of the signature!
+                // Finally, print out the complete hex dump of the signature!
 				uint32_t count = 0;
 				for (uint32_t i=0; i<_inputLength; i++)
 				{
@@ -5648,18 +6153,14 @@ public:
 		}
 	}
 
-	void dump(float minBalance)
-	{
+    void dump(float minBalance){
 		mTransactionFactory->dumpByBalance(minBalance);
 		mTransactionFactory->dumpByAge(minBalance);
 	}
 
-	virtual uint32_t getUsage(uint32_t baseTime,uint32_t daysMin,uint32_t daysMax,uint32_t &btcTotal)
-	{
+	virtual uint32_t getUsage(uint32_t baseTime,uint32_t daysMin,uint32_t daysMax,uint32_t &btcTotal){
 		uint32_t ret = 0;
-
 		ret = mTransactionFactory->getUsage(baseTime,daysMin,daysMax,btcTotal,0.000001f);
-
 		return ret;
 	}
 

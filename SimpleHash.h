@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-#include <malloc.h>
+//#include <malloc.h>
 #include <new>
 
 #define USE_MEMORY_MAP 0
