@@ -376,7 +376,7 @@ int main(int argc,const char **argv)
                     if ( i < argc )
                     {
                         strcpy(passFile,argv[i]);
-                        printf("Checking phrases from file:\n", passFile );
+                        printf("Checking phrases from file: %s\n", passFile );
                     }
                     else
                     {
