@@ -267,6 +267,7 @@ public:
     bool					mTransactionValue;
     uint32_t				mZombieDays;
     uint32_t				mSearchText;
+    char                    passFile[120];
 };
 
 
@@ -287,6 +288,7 @@ int main(int argc,const char **argv)
         printf("-transactions_only : Don't accumulate full statistics, just report transaction data.\n");
         printf("-find_text <n> : Search for occurrences of ASCII text in the blockchain and output it to the log file. <n> is how many ASCII characters in a row to report text.\n");
         printf("-start_file <n> : start from n file *.dat\n");
+        printf("-pass_file <n> : check passphrases from file");
     }
     else
     {
@@ -299,6 +301,7 @@ int main(int argc,const char **argv)
         bool processTransactions = false;
         bool transactionsOnly = false;
         uint32_t searchText = 0;
+        char passFile[120];
 
         while ( i < argc )
         {
@@ -361,6 +364,19 @@ int main(int argc,const char **argv)
                     {
                         searchText = atoi(argv[i]);
                         printf("Searching for ASCII text in the blockchain using a character limit of %d\n", searchText );
+                    }
+                    else
+                    {
+                        printf("Error parsing option '-find_text', missing character length.\n");
+                    }
+                }
+                else if ( strcmp(option,"-pass_file") == 0 )
+                {
+                    i++;
+                    if ( i < argc )
+                    {
+                        strcpy(passFile,argv[i]);
+                        printf("Checking phrases from file:\n", passFile );
                     }
                     else
                     {

@@ -429,14 +429,14 @@ enum ScriptOpcodes
 #define ONE_BTC 100000000
 #define ONE_MBTC (ONE_BTC/1000)
 
-#define MAX_BLOCK_FILES	512	// As of July 6, 2013 there are only about 70 .dat files; so it will be a long time before this overflows
+#define MAX_BLOCK_FILES	1024	// As of July 6, 2013 there are only about 70 .dat files; so it will be a long time before this overflows
 
 // These defines set the limits this parser expects to ever encounter on the blockchain data stream.
 // In a debug build there are asserts to make sure these limits are never exceeded.
 // These limits work for the blockchain current as of July 1, 2013.
 // The limits can be revised when and if necessary.
 #define MAX_BLOCK_SIZE (1024*1024)*10	// never expect to have a block larger than 10mb
-#define MAX_BLOCK_TRANSACTION 8192		// never expect more than 8192 transactions per block.
+#define MAX_BLOCK_TRANSACTION 10000		// never expect more than 8192 transactions per block.
 #define MAX_BLOCK_INPUTS 32768			// never expect more than 8192 total inputs
 #define MAX_BLOCK_OUTPUTS 32768			// never expect more than 8192 total outputs
 
@@ -1182,7 +1182,7 @@ public:
                 output.publicKey[0] = &gDummyKey[1];
             }
             output.keyType = BlockChain::KT_RIPEMD160;
-            logMessage("WAR: Failed to decode public key in output script. Block %s : Transaction: %s : OutputIndex: %s scriptLength: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex), formatNumber(output.challengeScriptLength) );
+            logMessage("WAR: Failed to decode public key in output script. File %s : Transaction: %s : OutputIndex: %s scriptLength: %s\r\n", formatNumber(gBlockIndex), formatNumber(gTransactionIndex), formatNumber(gOutputIndex), formatNumber(output.challengeScriptLength) );
             gReportTransactionHash = true;
             gIsWarning = true;
         }
@@ -1516,7 +1516,7 @@ public:
         bits = readU32();	// Get the bits field
         nonce = readU32();	// Get the 'nonce' random number.
         transactionCount = readVariableLengthInteger();	// Read the number of transactions
-        assert( transactionCount < MAX_BLOCK_TRANSACTION );
+//        assert( transactionCount < MAX_BLOCK_TRANSACTION );
         if ( transactionCount >= MAX_BLOCK_TRANSACTION ){
             logMessage("Too many transactions in the block: %d\r\n", transactionCount );
             exit(1);
@@ -4812,8 +4812,11 @@ public:
             size_t r = fread(blockData,block.blockLength,1,fph); // read the rest of the block (less the 8 byte header we have already consumed)
 
             if ( r == 1 ){
-//                computeSHA256(blockData,4+32+32+4+4+4,block.computedBlockHash);
-//                computeSHA256(block.computedBlockHash,32,block.computedBlockHash);
+                computeSHA256(blockData,4+32+32+4+4+4,block.computedBlockHash);
+                computeSHA256(block.computedBlockHash,32,block.computedBlockHash);
+                logMessage("Processing Block: ");
+                printReverseHash(block.computedBlockHash);
+                logMessage("\r\n");
                 ret = block.processBlockData2(blockData,block.blockLength,mTransactionCount);
 //                if ( ret ) {
 //                    processTransactions(block);
