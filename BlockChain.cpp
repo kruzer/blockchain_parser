@@ -442,7 +442,7 @@ enum ScriptOpcodes
 
 #define MAX_REASONABLE_SCRIPT_LENGTH (1024*32) // would never expect any script to be more than 16k in size; that would be very unusual!
 #define MAX_REASONABLE_INPUTS 8192				// really can't imagine any transaction ever having more than 8192 inputs
-#define MAX_REASONABLE_OUTPUTS 8192				// really can't imagine any transaction ever having more than 8192 outputs
+#define MAX_REASONABLE_OUTPUTS 8192*2				// really can't imagine any transaction ever having more than 8192 outputs
 
 class SignatureStat{
 
